@@ -171,6 +171,45 @@
     border:1px solid rgba(61,132,172,0.35);
     border-top-left-radius:4px;
     color:var(--papyrus);
+    position:relative;
+    padding-right:40px;
+  }
+  .speak-btn{
+    position:absolute;
+    top:8px;
+    right:8px;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    border:1px solid rgba(201,162,39,0.35);
+    background:rgba(201,162,39,0.1);
+    color:var(--gold-bright);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    flex-shrink:0;
+    transition: all 0.15s ease;
+    padding:0;
+  }
+  .speak-btn:hover{ background:rgba(201,162,39,0.22); }
+  .speak-btn svg{ width:13px; height:13px; }
+  .speak-btn.speaking{
+    background: var(--gold);
+    color:#1a1305;
+    animation: pulse-speak 1.2s infinite ease-in-out;
+  }
+  .speak-btn.loading{
+    background: rgba(201,162,39,0.3);
+    animation: spin-speak 0.8s linear infinite;
+  }
+  @keyframes spin-speak{
+    from{ transform: rotate(0deg); }
+    to{ transform: rotate(360deg); }
+  }
+  @keyframes pulse-speak{
+    0%,100%{ box-shadow:0 0 0 0 rgba(201,162,39,0.5); }
+    50%{ box-shadow:0 0 0 5px rgba(201,162,39,0); }
   }
   .msg.user{
     align-self:flex-end;
@@ -327,10 +366,82 @@ const chipsEl = document.getElementById('chips');
 
 let history = [];
 
+// ---- Voz (ElevenLabs — voz natural por IA) ----
+let currentAudio = null;
+let currentBtn = null;
+let currentlyLoadingBtn = null;
+
+function stopSpeaking(){
+  if (currentAudio){
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+  if (currentBtn) currentBtn.classList.remove('speaking', 'loading');
+  currentAudio = null;
+  currentBtn = null;
+}
+
+async function toggleSpeak(text, btn){
+  // Se já está tocando esse mesmo botão, para.
+  if (currentBtn === btn && currentAudio && !currentAudio.paused){
+    stopSpeaking();
+    return;
+  }
+  stopSpeaking();
+
+  btn.classList.add('loading');
+  currentlyLoadingBtn = btn;
+
+  try{
+    const response = await fetch('/api/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok){
+      throw new Error('Falha ao gerar áudio');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+
+    btn.classList.remove('loading');
+    btn.classList.add('speaking');
+    currentAudio = audio;
+    currentBtn = btn;
+
+    audio.onended = () => stopSpeaking();
+    audio.onerror = () => stopSpeaking();
+    audio.play();
+  } catch(err){
+    console.error(err);
+    btn.classList.remove('loading');
+    alert('Não consegui gerar o áudio agora. Tente novamente em instantes.');
+  }
+}
+
+const speakerIconSVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 9v6h4l5 5V4L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M19 6a9 9 0 010 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/></svg>';
+
 function addMessage(role, text){
   const div = document.createElement('div');
   div.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
-  div.textContent = text;
+
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  div.appendChild(textSpan);
+
+  if (role !== 'user'){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'speak-btn';
+    btn.setAttribute('aria-label', 'Ouvir a Cleópatra falando essa mensagem');
+    btn.innerHTML = speakerIconSVG;
+    btn.addEventListener('click', () => toggleSpeak(text, btn));
+    div.appendChild(btn);
+  }
+
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return div;
