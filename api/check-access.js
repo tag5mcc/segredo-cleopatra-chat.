@@ -1,6 +1,6 @@
 // Verifica se um e-mail já pagou (registrado pelo webhook da Kiwify).
 
-const { redisCmd } = require('./_redis');
+const { redisGet } = require('./_redis');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,7 +15,7 @@ module.exports = async function handler(req, res) {
   const normalized = email.toLowerCase().trim();
 
   try {
-    const result = await redisCmd(['GET', `paid:${normalized}`]);
+    const result = await redisGet(`paid:${normalized}`);
     return res.status(200).json({ allowed: !!result });
   } catch (err) {
     console.error('Erro ao checar acesso:', err);
