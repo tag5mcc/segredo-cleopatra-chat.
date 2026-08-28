@@ -9,7 +9,7 @@
 // A variável de ambiente KIWIFY_WEBHOOK_SECRET na Vercel precisa ter o MESMO
 // valor que você colocar em "SEU_SEGREDO" na URL acima.
 
-const { redisCmd } = require('./_redis');
+const { redisSet, redisDel } = require('./_redis');
 
 const APPROVE_EVENTS = new Set(['compra_aprovada', 'subscription_renewed']);
 const REVOKE_EVENTS = new Set(['compra_reembolsada', 'chargeback', 'subscription_canceled', 'subscription_late']);
@@ -65,16 +65,15 @@ module.exports = async function handler(req, res) {
 
   if (!email) {
     console.error('Não encontrei e-mail no payload do webhook. Evento:', eventType);
-    // Responde 200 mesmo assim para a Kiwify não ficar reenviando.
     return res.status(200).json({ received: true, warning: 'email não encontrado' });
   }
 
   try {
     if (APPROVE_EVENTS.has(eventType)) {
-      await redisCmd(['SET', `paid:${email}`, '1']);
+      await redisSet(`paid:${email}`, '1');
       console.log(`Acesso LIBERADO para ${email} (evento: ${eventType})`);
     } else if (REVOKE_EVENTS.has(eventType)) {
-      await redisCmd(['DEL', `paid:${email}`]);
+      await redisDel(`paid:${email}`);
       console.log(`Acesso REVOGADO para ${email} (evento: ${eventType})`);
     } else {
       console.log(`Evento "${eventType}" recebido mas não mapeado, ignorando.`);
